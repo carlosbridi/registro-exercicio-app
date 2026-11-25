@@ -22,4 +22,12 @@
     <string name="por_atividade">Por atividade</string>
     <string name="salvar_alteracoes">Salvar alterações</string>
     <string name="editar_atividade">Editar atividade</string>
+    <string name="subtitulo_backup">Backup e importação</string>
+    <string name="tab_backup">Backup</string>
+    <string name="backup_titulo">Backup das atividades</string>
+    <string name="backup_descricao">Gera um arquivo CSV com todas as atividades registradas. Ao final você pode compartilhar o arquivo (e-mail, Google Drive…) ou salvá-lo no aparelho.</string>
+    <string name="backup_botao">Fazer backup</string>
+    <string name="importar_titulo">Importar atividades</string>
+    <string name="importar_descricao">Restaura as atividades de um arquivo de backup CSV. Você escolhe de onde abrir o arquivo: armazenamento do aparelho, Google Drive ou outro app.</string>
+    <string name="importar_botao">Importar backup</string>
 </resources>
