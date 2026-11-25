@@ -19,5 +19,10 @@
         <activity
             android:name=".EditarActivity"
             android:windowSoftInputMode="adjustResize" />
+        <provider
+            android:name=".BackupProvider"
+            android:authorities="br.com.registroexercicio.backup"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

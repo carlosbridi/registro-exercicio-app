@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,6 +90,80 @@ public class DbHelper extends SQLiteOpenHelper {
             c.close();
         }
         return lista;
+    }
+
+    /** Todas as atividades, da mais antiga para a mais recente. */
+    public List<Registro> listarTodas() {
+        List<Registro> lista = new ArrayList<Registro>();
+        Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id, tipo, data, minutos FROM atividade ORDER BY data, id", null);
+        try {
+            while (c.moveToNext()) {
+                Registro r = new Registro();
+                r.id = c.getLong(0);
+                r.tipo = c.getString(1);
+                r.data = c.getString(2);
+                r.minutos = c.getInt(3);
+                lista.add(r);
+            }
+        } finally {
+            c.close();
+        }
+        return lista;
+    }
+
+    public int contar() {
+        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM atividade", null);
+        try {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        } finally {
+            c.close();
+        }
+    }
+
+    /**
+     * Importa atividades de um backup e devolve quantas foram inseridas.
+     * Com {@code substituir}, apaga tudo antes. Sem ele, só insere o que excede o que já existe
+     * (mesmo tipo, data e minutos), de modo que reimportar o mesmo backup não duplica nada.
+     */
+    public int importar(List<Registro> registros, boolean substituir) {
+        SQLiteDatabase db = getWritableDatabase();
+        int inseridos = 0;
+        db.beginTransaction();
+        try {
+            Map<String, Integer> existentes = new HashMap<String, Integer>();
+            if (substituir) {
+                db.delete("atividade", null, null);
+            } else {
+                Cursor c = db.rawQuery(
+                        "SELECT tipo, data, minutos, COUNT(*) FROM atividade GROUP BY tipo, data, minutos", null);
+                try {
+                    while (c.moveToNext()) {
+                        existentes.put(c.getString(0) + '|' + c.getString(1) + '|' + c.getInt(2), c.getInt(3));
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+            for (Registro r : registros) {
+                String chave = r.tipo + '|' + r.data + '|' + r.minutos;
+                Integer ja = existentes.get(chave);
+                if (ja != null && ja > 0) {
+                    existentes.put(chave, ja - 1);
+                    continue;
+                }
+                ContentValues v = new ContentValues();
+                v.put("tipo", r.tipo);
+                v.put("data", r.data);
+                v.put("minutos", r.minutos);
+                db.insertOrThrow("atividade", null, v);
+                inseridos++;
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        return inseridos;
     }
 
     public void atualizar(long id, String tipo, String data, int minutos) {

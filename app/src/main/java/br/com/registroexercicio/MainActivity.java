@@ -1,8 +1,15 @@
 package br.com.registroexercicio;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
+import android.net.Uri;
+import android.os.Build;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -16,8 +23,15 @@ import android.widget.Toast;
 import android.view.Gravity;
 import android.view.ViewGroup;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -32,8 +46,12 @@ public class MainActivity extends Activity {
     private DbHelper db;
     private float dp;
 
-    private View telaRegistrar, telaRelatorio;
+    private static final int TELA_REGISTRAR = 0, TELA_RELATORIO = 1, TELA_BACKUP = 2;
+    private static final int REQ_IMPORTAR = 1, REQ_SALVAR_BACKUP = 2;
+
+    private View telaRegistrar, telaRelatorio, telaBackup;
     private TextView txtSubtitulo;
+    private int telaAtual = TELA_REGISTRAR;
 
     // Registrar
     private View tileBicicleta, tileEsteira;
@@ -61,18 +79,23 @@ public class MainActivity extends Activity {
 
         telaRegistrar = findViewById(R.id.telaRegistrar);
         telaRelatorio = findViewById(R.id.telaRelatorio);
+        telaBackup = findViewById(R.id.telaBackup);
         txtSubtitulo = (TextView) findViewById(R.id.txtSubtitulo);
 
         findViewById(R.id.tabRegistrar).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { mostrarTela(true); }
+            public void onClick(View v) { mostrarTela(TELA_REGISTRAR); }
         });
         findViewById(R.id.tabRelatorio).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { mostrarTela(false); }
+            public void onClick(View v) { mostrarTela(TELA_RELATORIO); }
+        });
+        findViewById(R.id.tabBackup).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { mostrarTela(TELA_BACKUP); }
         });
 
         iniciarRegistrar();
         iniciarRelatorio();
-        mostrarTela(true);
+        iniciarBackup();
+        mostrarTela(savedInstanceState == null ? TELA_REGISTRAR : savedInstanceState.getInt("tela", TELA_REGISTRAR));
     }
 
     @Override
@@ -90,13 +113,24 @@ public class MainActivity extends Activity {
 
     private int px(int valorDp) { return (int) (valorDp * dp + 0.5f); }
 
-    private void mostrarTela(boolean registrar) {
-        telaRegistrar.setVisibility(registrar ? View.VISIBLE : View.GONE);
-        telaRelatorio.setVisibility(registrar ? View.GONE : View.VISIBLE);
-        txtSubtitulo.setText(registrar ? R.string.subtitulo_registrar : R.string.subtitulo_relatorio);
-        estiloAba(R.id.iconeRegistrar, R.id.rotuloRegistrar, registrar);
-        estiloAba(R.id.iconeRelatorio, R.id.rotuloRelatorio, !registrar);
-        if (!registrar) atualizarRelatorio();
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // O seletor de arquivos pode derrubar a activity; ao voltar, reabre na mesma aba.
+        outState.putInt("tela", telaAtual);
+    }
+
+    private void mostrarTela(int tela) {
+        telaAtual = tela;
+        telaRegistrar.setVisibility(tela == TELA_REGISTRAR ? View.VISIBLE : View.GONE);
+        telaRelatorio.setVisibility(tela == TELA_RELATORIO ? View.VISIBLE : View.GONE);
+        telaBackup.setVisibility(tela == TELA_BACKUP ? View.VISIBLE : View.GONE);
+        txtSubtitulo.setText(tela == TELA_REGISTRAR ? R.string.subtitulo_registrar
+                : tela == TELA_RELATORIO ? R.string.subtitulo_relatorio : R.string.subtitulo_backup);
+        estiloAba(R.id.iconeRegistrar, R.id.rotuloRegistrar, tela == TELA_REGISTRAR);
+        estiloAba(R.id.iconeRelatorio, R.id.rotuloRelatorio, tela == TELA_RELATORIO);
+        estiloAba(R.id.iconeBackup, R.id.rotuloBackup, tela == TELA_BACKUP);
+        if (tela == TELA_RELATORIO) atualizarRelatorio();
     }
 
     private void estiloAba(int iconeId, int rotuloId, boolean ativa) {
@@ -364,6 +398,214 @@ public class MainActivity extends Activity {
     private String formatarMinutos(int min) {
         if (min < 60) return min + " min";
         return (min / 60) + "h " + (min % 60) + "min";
+    }
+
+    // ---------- Tela Backup ----------
+
+    private void iniciarBackup() {
+        findViewById(R.id.btnBackup).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { fazerBackup(); }
+        });
+        findViewById(R.id.btnImportar).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { escolherArquivoImportacao(); }
+        });
+    }
+
+    private void fazerBackup() {
+        List<DbHelper.Registro> registros = db.listarTodas();
+        if (registros.isEmpty()) {
+            Toast.makeText(this, "Não há atividades para incluir no backup.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        final File arquivo;
+        try {
+            File pasta = BackupProvider.pasta(this);
+            File[] antigos = pasta.listFiles();
+            if (antigos != null) for (File f : antigos) f.delete();
+            arquivo = new File(pasta, "registro_exercicios_"
+                    + new SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(new Date()) + ".csv");
+            OutputStream out = new FileOutputStream(arquivo);
+            try {
+                out.write(BackupCsv.gerar(registros).getBytes("UTF-8"));
+            } finally {
+                out.close();
+            }
+        } catch (IOException e) {
+            avisar("Backup", "Não foi possível gerar o arquivo de backup.");
+            return;
+        }
+
+        AlertDialog.Builder dlg = new AlertDialog.Builder(this)
+                .setTitle("Backup concluído")
+                .setMessage(atividades(registros.size()) + " no arquivo " + arquivo.getName()
+                        + ".\n\nCompartilhe o arquivo para enviá-lo por e-mail ou guardá-lo no Google Drive.")
+                .setNegativeButton("Fechar", null)
+                .setPositiveButton("Compartilhar", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { compartilhar(arquivo); }
+                });
+        if (Build.VERSION.SDK_INT >= 19) {
+            dlg.setNeutralButton("Salvar no aparelho", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface d, int w) {
+                    Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType(BackupProvider.MIME);
+                    i.putExtra(Intent.EXTRA_TITLE, arquivo.getName());
+                    abrir(i, REQ_SALVAR_BACKUP);
+                }
+            });
+        }
+        dlg.show();
+    }
+
+    private void compartilhar(File arquivo) {
+        Uri uri = BackupProvider.uriPara(arquivo);
+        Intent i = new Intent(Intent.ACTION_SEND);
+        i.setType(BackupProvider.MIME);
+        i.putExtra(Intent.EXTRA_STREAM, uri);
+        i.putExtra(Intent.EXTRA_SUBJECT, "Backup - " + getString(R.string.app_name));
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (Build.VERSION.SDK_INT >= 16) {
+            i.setClipData(ClipData.newRawUri(arquivo.getName(), uri));
+        } else {
+            // Antes do Android 4.1 a permissão não acompanha o EXTRA_STREAM: concede a cada app de destino.
+            for (ResolveInfo info : getPackageManager().queryIntentActivities(i, 0)) {
+                grantUriPermission(info.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+        }
+        abrir(Intent.createChooser(i, "Compartilhar backup"), 0);
+    }
+
+    private void escolherArquivoImportacao() {
+        // "*/*" porque cada fonte (Drive, e-mail, gerenciadores) classifica CSV com um tipo diferente.
+        Intent i = new Intent(Build.VERSION.SDK_INT >= 19 ? Intent.ACTION_OPEN_DOCUMENT : Intent.ACTION_GET_CONTENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        abrir(Build.VERSION.SDK_INT >= 19 ? i : Intent.createChooser(i, "Selecionar backup"), REQ_IMPORTAR);
+    }
+
+    private void abrir(Intent i, int requestCode) {
+        try {
+            if (requestCode == 0) startActivity(i);
+            else startActivityForResult(i, requestCode);
+        } catch (ActivityNotFoundException e) {
+            avisar("Backup", "Nenhum aplicativo disponível para esta ação.");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (requestCode == REQ_IMPORTAR) lerBackup(data.getData());
+        else if (requestCode == REQ_SALVAR_BACKUP) salvarBackupEm(data.getData());
+    }
+
+    private void salvarBackupEm(Uri destino) {
+        try {
+            OutputStream out = getContentResolver().openOutputStream(destino);
+            if (out == null) throw new IOException();
+            try {
+                out.write(BackupCsv.gerar(db.listarTodas()).getBytes("UTF-8"));
+            } finally {
+                out.close();
+            }
+            Toast.makeText(this, "Backup salvo!", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            avisar("Backup", "Não foi possível salvar o backup no local escolhido.");
+        }
+    }
+
+    /** Lê o arquivo fora da thread principal: a fonte pode ser remota (ex.: Google Drive). */
+    private void lerBackup(final Uri origem) {
+        Toast.makeText(this, "Lendo backup…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            public void run() {
+                BackupCsv.Leitura lida = null;
+                try {
+                    InputStream in = getContentResolver().openInputStream(origem);
+                    if (in != null) {
+                        try {
+                            lida = BackupCsv.ler(in);
+                        } finally {
+                            in.close();
+                        }
+                    }
+                } catch (Exception e) {
+                    lida = null;
+                }
+                final BackupCsv.Leitura leitura = lida;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (isFinishing()) return;
+                        if (leitura == null) {
+                            avisar("Importar", "Não foi possível ler o arquivo selecionado.");
+                        } else if (leitura.registros.isEmpty()) {
+                            avisar("Importar", "O arquivo selecionado não contém atividades válidas. "
+                                    + "Escolha um CSV gerado pelo backup deste aplicativo.");
+                        } else {
+                            confirmarImportacao(leitura);
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void confirmarImportacao(final BackupCsv.Leitura leitura) {
+        String msg = atividades(leitura.registros.size()) + " no arquivo.";
+        if (leitura.ignoradas > 0) msg += "\n" + leitura.ignoradas + " linha(s) inválida(s) serão ignoradas.";
+        msg += "\n\nAdicionar: mantém as atividades atuais e inclui apenas as que ainda não existem."
+                + "\nSubstituir: apaga as atividades atuais e fica só com as do arquivo.";
+        new AlertDialog.Builder(this)
+                .setTitle("Importar atividades")
+                .setMessage(msg)
+                .setNegativeButton("Cancelar", null)
+                .setNeutralButton("Substituir", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { confirmarSubstituicao(leitura); }
+                })
+                .setPositiveButton("Adicionar", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { importar(leitura, false); }
+                })
+                .show();
+    }
+
+    private void confirmarSubstituicao(final BackupCsv.Leitura leitura) {
+        int atuais = db.contar();
+        if (atuais == 0) {
+            importar(leitura, true);
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Substituir atividades")
+                .setMessage(atividades(atuais) + " atualmente no aplicativo. Tudo será apagado e substituído "
+                        + "pelo conteúdo do arquivo. Deseja continuar?")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Substituir", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { importar(leitura, true); }
+                })
+                .show();
+    }
+
+    private void importar(BackupCsv.Leitura leitura, boolean substituir) {
+        int inseridas;
+        try {
+            inseridas = db.importar(leitura.registros, substituir);
+        } catch (RuntimeException e) {
+            avisar("Importar", "Falha ao importar. Nenhuma atividade foi alterada.");
+            return;
+        }
+        int repetidas = leitura.registros.size() - inseridas;
+        String msg = inseridas == 1 ? "1 atividade importada." : inseridas + " atividades importadas.";
+        if (repetidas > 0) msg += "\n" + repetidas + " já existia(m) e não foi(ram) duplicada(s).";
+        avisar("Importação concluída", msg);
+    }
+
+    private String atividades(int n) {
+        return n == 1 ? "1 atividade" : n + " atividades";
+    }
+
+    private void avisar(String titulo, String mensagem) {
+        new AlertDialog.Builder(this).setTitle(titulo).setMessage(mensagem).setPositiveButton("OK", null).show();
     }
 
     // ---------- Util ----------
