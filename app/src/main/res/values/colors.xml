@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vinho">#6D1F2F</color>
+    <color name="vinho_escuro">#4E1421</color>
+    <color name="salmao">#F4877A</color>
+    <color name="salmao_claro">#FBD3CC</color>
+    <color name="creme">#FFF4F0</color>
+    <color name="texto">#3B1F25</color>
+    <color name="texto_suave">#8A6B70</color>
+    <color name="borda">#F1C9C2</color>
+    <color name="branco">#FFFFFF</color>
+</resources>

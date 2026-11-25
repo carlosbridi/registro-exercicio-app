@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Configuração local (caminho do SDK)
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Saídas de build
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Chaves de assinatura
+*.jks
+*.keystore
+
+# Logs e sistema
+*.log
+.DS_Store

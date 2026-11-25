@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Registro de Exercícios</string>
+    <string name="subtitulo_registrar">Registrar atividade</string>
+    <string name="subtitulo_relatorio">Seu desempenho</string>
+    <string name="tab_registrar">Registrar</string>
+    <string name="tab_relatorio">Relatório</string>
+    <string name="atividade">Atividade</string>
+    <string name="bicicleta">Bicicleta</string>
+    <string name="esteira">Esteira</string>
+    <string name="data">Data</string>
+    <string name="minutos">Duração</string>
+    <string name="salvar">Salvar atividade</string>
+    <string name="periodo">Período</string>
+    <string name="dias7">7 dias</string>
+    <string name="dias15">15 dias</string>
+    <string name="dias30">30 dias</string>
+    <string name="personalizado">Período</string>
+    <string name="de">De</string>
+    <string name="ate">Até</string>
+    <string name="total">Tempo total</string>
+    <string name="por_atividade">Por atividade</string>
+    <string name="salvar_alteracoes">Salvar alterações</string>
+    <string name="editar_atividade">Editar atividade</string>
+</resources>
